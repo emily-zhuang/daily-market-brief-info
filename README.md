@@ -1,0 +1,14 @@
+# daily-market-brief-info
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Daily Market Brief</title>
+</head>
+<body>
+  <h1>Daily Market Brief</h1>
+  <p>每日整理美国、中国经济股市及加密货币市场新闻。</p>
+  <p><a href="privacy.html">隐私政策</a></p>
+  <p><a href="terms.html">服务条款</a></p>
+</body>
+</html>
