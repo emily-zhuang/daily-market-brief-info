@@ -15,6 +15,12 @@ class SmtpConfigTests(unittest.TestCase):
 
     self.assertEqual(smtp_config_from_env(), ("sender@gmail.com", "abcdefghijklmnop"))
 
+  def test_removes_non_breaking_spaces_from_app_password(self):
+    os.environ["GMAIL_ADDRESS"] = "sender@gmail.com"
+    os.environ["GMAIL_APP_PASSWORD"] = "abcd\u00a0efgh ijkl mnop"
+
+    self.assertEqual(smtp_config_from_env(), ("sender@gmail.com", "abcdefghijklmnop"))
+
   def test_reports_missing_secret(self):
     os.environ.pop("GMAIL_ADDRESS", None)
     os.environ.pop("GMAIL_APP_PASSWORD", None)
