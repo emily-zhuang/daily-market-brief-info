@@ -17,6 +17,7 @@ import requests
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.oxml.ns import qn
+from bilingual import bilingual_block, translate_to_chinese
 from mail_config import smtp_config_from_env
 
 BEIJING = ZoneInfo("Asia/Shanghai")
@@ -109,27 +110,37 @@ def build_doc(news: dict[str, list[dict[str, str]]], markets: dict[str, str], no
         style._element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), "Noto Sans CJK SC")
     doc.styles["Normal"].font.name = "Noto Sans CJK SC"
     doc.styles["Normal"].font.size = Pt(10)
-    doc.add_heading(f"美国中国经济股市及加密货币每日汇总｜{now:%Y-%m-%d}", 0)
-    doc.add_paragraph(f"报告时间：北京时间 {now:%Y-%m-%d %H:%M}｜新闻窗口：前24小时｜来源口径：主流媒体与公开市场数据。")
-    doc.add_paragraph("说明：本文为新闻与数据摘要，不构成投资建议。主流媒体报道未逐条交叉验证；摘要级信息不扩写为未经报道的事实。")
+    doc.add_heading(f"美国、中国经济股市及加密货币每日汇总 | Daily US-China-Crypto Market Brief｜{now:%Y-%m-%d}", 0)
+    doc.add_paragraph(f"报告时间 / Report time：北京时间 / Beijing time {now:%Y-%m-%d %H:%M}｜新闻窗口 / News window：前24小时 / Previous 24 hours｜来源 / Sources：主流媒体与公开市场数据 / Mainstream media and public market data。")
+    doc.add_paragraph("说明 / Note：本文为新闻与数据摘要，不构成投资建议 / This is a news and data summary, not investment advice。主流媒体报道未逐条交叉验证 / Mainstream-media reports are not independently cross-checked。")
 
-    doc.add_heading("一、加密货币市场数据", 1)
+    doc.add_heading("一、加密货币市场数据 / Crypto Market Data", 1)
     for key, value in markets.items():
-        doc.add_paragraph(f"{key}：{value}", style="List Bullet")
-    doc.add_heading("二、新闻摘要", 1)
+        doc.add_paragraph(f"{key} / {key.replace('价格', 'Price').replace('市值', 'Market cap').replace('状态', 'Status')}：{value}", style="List Bullet")
+    doc.add_heading("二、新闻摘要 / News Summary", 1)
     for section_name, items in news.items():
-        doc.add_heading(section_name, 2)
+        english_section = {
+            "美国经济与股市": "US Economy and Equity Markets",
+            "中国经济与股市": "China Economy and Equity Markets",
+            "加密货币": "Cryptocurrency",
+        }.get(section_name, section_name)
+        doc.add_heading(f"{section_name} / {english_section}", 2)
         if not items:
-            doc.add_paragraph("前24小时未取得可用条目。")
+            doc.add_paragraph("前24小时未取得可用条目 / No usable items were retrieved in the previous 24 hours.")
         for item in items:
             p = doc.add_paragraph(style="List Bullet")
-            p.add_run(item["title"] or "无标题").bold = True
-            p.add_run(f"｜{item['source']}\n{item['summary']}")
+            title_en = item["title"] or "Untitled"
+            summary_en = item["summary"] or "No summary available."
+            p.add_run(bilingual_block(
+                translate_to_chinese(title_en), title_en,
+                translate_to_chinese(summary_en), summary_en,
+            )).bold = True
+            p.add_run(f"\n来源 / Source：{item['source']}")
             add_link(p, "原文", item["url"])
 
-    doc.add_heading("三、数据与运行记录", 1)
-    doc.add_paragraph(f"执行时间：{now:%Y-%m-%d %H:%M:%S} 北京时间")
-    doc.add_paragraph("采集方式：RSS/公开网页摘要；市场行情优先使用 CoinMarketCap API。")
+    doc.add_heading("三、数据与运行记录 / Data and Run Log", 1)
+    doc.add_paragraph(f"执行时间 / Execution time：{now:%Y-%m-%d %H:%M:%S} 北京时间 / Beijing time")
+    doc.add_paragraph("采集方式 / Collection：RSS/公开网页摘要 / RSS and public web summaries；市场行情优先使用 CoinMarketCap API / CoinMarketCap API is preferred for market data。")
     for paragraph in doc.paragraphs:
         for run in paragraph.runs:
             run.font.name = "Noto Sans CJK SC"
