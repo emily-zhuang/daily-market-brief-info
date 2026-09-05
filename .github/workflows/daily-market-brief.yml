@@ -1,0 +1,40 @@
+name: Daily US-China-Crypto Market Brief
+
+on:
+  schedule:
+    # 00:30 UTC = 08:30 Beijing time. Asia/Shanghai has no DST.
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: daily-market-brief
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --disable-pip-version-check -r requirements.txt
+      - name: Generate DOCX and send Gmail
+        env:
+          COINMARKETCAP_API_KEY: ${{ secrets.COINMARKETCAP_API_KEY }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          REPORT_RECIPIENT: 975471498@qq.com
+        run: python daily_market_brief.py
+      - name: Upload generated report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-market-brief-${{ github.run_id }}
+          path: daily-market-brief/outputs/*.docx
+          if-no-files-found: ignore
+
