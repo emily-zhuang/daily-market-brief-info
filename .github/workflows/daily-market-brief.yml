@@ -25,9 +25,8 @@ jobs:
       - name: Generate DOCX and send Gmail
         env:
           COINMARKETCAP_API_KEY: ${{ secrets.COINMARKETCAP_API_KEY }}
-          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
-          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
-          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           REPORT_RECIPIENT: 975471498@qq.com
         run: python daily_market_brief.py
       - name: Upload generated report
@@ -37,4 +36,3 @@ jobs:
           name: daily-market-brief-${{ github.run_id }}
           path: daily-market-brief/outputs/*.docx
           if-no-files-found: ignore
-

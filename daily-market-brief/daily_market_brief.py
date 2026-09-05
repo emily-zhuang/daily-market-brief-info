@@ -5,6 +5,7 @@ import email.mime.multipart
 import email.mime.text
 import os
 import re
+import smtplib
 from datetime import datetime, timedelta, timezone
 from email.mime.base import MIMEBase
 from email import encoders
@@ -16,16 +17,13 @@ import requests
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.oxml.ns import qn
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
+from mail_config import smtp_config_from_env
 
 BEIJING = ZoneInfo("Asia/Shanghai")
 UTC = timezone.utc
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "outputs"
 OUT.mkdir(parents=True, exist_ok=True)
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 FEEDS = {
     "美国经济与股市": [
@@ -144,17 +142,9 @@ def build_doc(news: dict[str, list[dict[str, str]]], markets: dict[str, str], no
 
 
 def gmail_send(path: Path, now: datetime) -> None:
-    creds = Credentials(
-        None,
-        refresh_token=os.environ["GMAIL_REFRESH_TOKEN"],
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["GMAIL_CLIENT_ID"],
-        client_secret=os.environ["GMAIL_CLIENT_SECRET"],
-        scopes=SCOPES,
-    )
-    creds.refresh(Request())
-    service = build("gmail", "v1", credentials=creds)
+    sender, app_password = smtp_config_from_env()
     message = email.mime.multipart.MIMEMultipart()
+    message["from"] = sender
     message["to"] = os.getenv("REPORT_RECIPIENT", "975471498@qq.com")
     message["subject"] = f"美国与中国经济股市及加密货币每日新闻汇总｜{now:%Y-%m-%d}"
     message.attach(email.mime.text.MIMEText(
@@ -165,8 +155,9 @@ def gmail_send(path: Path, now: datetime) -> None:
     encoders.encode_base64(part)
     part.add_header("Content-Disposition", "attachment", filename=path.name)
     message.attach(part)
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode().rstrip("=")
-    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
+        smtp.login(sender, app_password)
+        smtp.send_message(message)
 
 
 def main() -> None:
