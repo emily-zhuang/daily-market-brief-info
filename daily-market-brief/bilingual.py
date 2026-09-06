@@ -11,6 +11,10 @@ def bilingual_block(title_zh: str, title_en: str, summary_zh: str, summary_en: s
     )
 
 
+def parse_mymemory_response(payload: dict) -> str:
+    return str(payload.get("responseData", {}).get("translatedText", "")).strip()
+
+
 def _has_cjk(text: str) -> bool:
     return any("\u4e00" <= char <= "\u9fff" for char in text)
 
@@ -30,6 +34,19 @@ def translate_to_chinese(text: str) -> str:
         )
         response.raise_for_status()
         translated = "".join(part[0] for part in response.json()[0] if part and part[0])
-        return translated.strip() or text
+        if translated.strip():
+            return translated.strip()
+    except Exception:
+        pass
+
+    try:
+        response = requests.get(
+            "https://api.mymemory.translated.net/get",
+            params={"q": text, "langpair": "en|zh-CN"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        translated = parse_mymemory_response(response.json())
+        return translated or text
     except Exception:
         return text
