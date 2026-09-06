@@ -18,6 +18,7 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.oxml.ns import qn
 from bilingual import bilingual_block, translate_to_chinese
+from cmc_market import extract_snapshot
 from mail_config import smtp_config_from_env
 
 BEIJING = ZoneInfo("Asia/Shanghai")
@@ -77,20 +78,22 @@ def collect_news(since: datetime) -> dict[str, list[dict[str, str]]]:
 def market_data() -> dict[str, str]:
     key = os.getenv("COINMARKETCAP_API_KEY")
     if not key:
-        return {"status": "未配置 COINMARKETCAP_API_KEY，未填充行情数值。"}
+        return {"error": "未配置 COINMARKET_API_KEY / COINMARKETCAP_API_KEY；未填充 CoinMarketCap 行情数值。"}
     try:
-        response = requests.get(
-            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
-            params={"symbol": "BTC,ETH", "convert": "USD"},
-            headers={"X-CMC_PRO_API_KEY": key}, timeout=20)
-        response.raise_for_status()
-        payload = response.json()["data"]
-        return {
-            symbol: f"价格 ${payload[symbol]['quote']['USD']['price']:,.2f}；24h {payload[symbol]['quote']['USD']['percent_change_24h']:.2f}%；市值 ${payload[symbol]['quote']['USD']['market_cap']:,.0f}"
-            for symbol in ("BTC", "ETH")
-        } | {"status": f"CoinMarketCap 抓取时间：{datetime.now(UTC).astimezone(BEIJING):%Y-%m-%d %H:%M} 北京时间；报价 USD。"}
+        headers = {"X-CMC_PRO_API_KEY": key}
+        listings = requests.get(
+            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest",
+            params={"start": 1, "limit": 10, "convert": "USD"},
+            headers=headers, timeout=20)
+        listings.raise_for_status()
+        global_metrics = requests.get(
+            "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest",
+            params={"convert": "USD"}, headers=headers, timeout=20)
+        global_metrics.raise_for_status()
+        return {"snapshot": extract_snapshot(listings.json(), global_metrics.json()),
+                "captured_at": f"{datetime.now(UTC).astimezone(BEIJING):%Y-%m-%d %H:%M} 北京时间 / Beijing time"}
     except Exception as exc:
-        return {"status": f"CoinMarketCap 读取失败：{exc}"}
+        return {"error": f"CoinMarketCap 读取失败 / CoinMarketCap request failed：{exc}"}
 
 
 def add_link(paragraph, text: str, url: str) -> None:
@@ -115,8 +118,32 @@ def build_doc(news: dict[str, list[dict[str, str]]], markets: dict[str, str], no
     doc.add_paragraph("说明 / Note：本文为新闻与数据摘要，不构成投资建议 / This is a news and data summary, not investment advice。主流媒体报道未逐条交叉验证 / Mainstream-media reports are not independently cross-checked。")
 
     doc.add_heading("一、加密货币市场数据 / Crypto Market Data", 1)
-    for key, value in markets.items():
-        doc.add_paragraph(f"{key} / {key.replace('价格', 'Price').replace('市值', 'Market cap').replace('状态', 'Status')}：{value}", style="List Bullet")
+    snapshot = markets.get("snapshot")
+    if snapshot:
+        global_metrics = snapshot["global"]
+        doc.add_paragraph("Global metrics / 全球市场指标", style="Heading 2")
+        for label, value in (
+            ("Total market cap / 全球总市值", global_metrics["total_market_cap"]),
+            ("Volume 24h / 24小时成交量", global_metrics["total_volume_24h"]),
+            ("BTC dominance / BTC 主导率", global_metrics["btc_dominance"]),
+            ("ETH dominance / ETH 主导率", global_metrics["eth_dominance"]),
+            ("Active cryptocurrencies / 活跃加密货币数量", global_metrics["active_cryptocurrencies"]),
+        ):
+            doc.add_paragraph(f"{label}：{value}", style="List Bullet")
+        doc.add_paragraph("Top 10 cryptocurrencies / 市值前十加密货币", style="Heading 2")
+        table = doc.add_table(rows=1, cols=10)
+        table.style = "Table Grid"
+        headers = ["Rank\n排名", "Asset\n币种", "Price\n价格", "1h", "24h", "7d", "Market cap\n市值", "Volume 24h\n24小时量", "Circulating supply\n流通供应", "Source\n来源"]
+        for cell, value in zip(table.rows[0].cells, headers):
+            cell.text = value
+        for asset in snapshot["assets"]:
+            cells = table.add_row().cells
+            values = [asset["rank"], f"{asset['name']} ({asset['symbol']})", asset["price"], asset["change_1h"], asset["change_24h"], asset["change_7d"], asset["market_cap"], asset["volume_24h"], asset["supply"], "CoinMarketCap.com"]
+            for cell, value in zip(cells, values):
+                cell.text = str(value)
+        doc.add_paragraph(f"数据抓取时间 / Captured：{markets['captured_at']}；报价货币 / Quote currency：USD。")
+    else:
+        doc.add_paragraph(markets.get("error", "CoinMarketCap 数据不可用 / Data unavailable"))
     doc.add_heading("二、新闻摘要 / News Summary", 1)
     for section_name, items in news.items():
         english_section = {
