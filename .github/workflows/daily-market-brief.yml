@@ -22,6 +22,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --disable-pip-version-check -r requirements.txt
+      - name: Record execution time
+        run: |
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
+
+          now = datetime.now(timezone.utc)
+          print(f"GitHub runner UTC: {now:%Y-%m-%d %H:%M:%S %Z}")
+          print(f"Beijing time: {now.astimezone(ZoneInfo('Asia/Shanghai')):%Y-%m-%d %H:%M:%S %Z}")
+          PY
       - name: Generate DOCX and send Gmail
         env:
           COINMARKETCAP_API_KEY: ${{ secrets.COINMARKETCAP_API_KEY }}
